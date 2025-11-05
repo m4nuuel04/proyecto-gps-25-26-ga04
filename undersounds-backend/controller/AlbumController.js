@@ -10,6 +10,8 @@ const axios = require('axios');
 const audioConverter = require('../services/AudioConverterService');
 const mongoose = require('mongoose');
 
+// Tarea GA04-15-H3.1 legada
+
 // Usar rutas relativas para los archivos de música
 const MUSIC_FILES_PATH = path.join(process.cwd(), '..', 'undersounds-frontend', 'src', 'assets', 'music');
 
