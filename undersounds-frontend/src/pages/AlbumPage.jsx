@@ -28,6 +28,7 @@ import axios from 'axios';
 const ProfileImage = 'https://via.placeholder.com/40';
 
 // Tarea GA04-59 H16.2.1 legada
+// Tarea GA04-59 H16.2.2 legada
 const AlbumPage = () => {
   const { id } = useParams();
   const location = useLocation();
