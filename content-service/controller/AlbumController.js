@@ -10,6 +10,8 @@ const axios = require('axios');
 const audioConverter = require('../services/AudioConverterService');
 const mongoose = require('mongoose');
 
+// Tarea GA04-15-H3.1 legada
+
 // Usar rutas relativas para los archivos de música
 const MUSIC_FILES_PATH = path.join(process.cwd(), '..', 'undersounds-frontend', 'src', 'assets', 'music');
 
@@ -71,7 +73,9 @@ class AlbumController {
       res.status(500).json({ error: error.message });
     }
   }
-  
+
+  //Tarea GA04-55 H2.1.1 legada
+  //Tarea GA04-55 H2.1.2 legada  
   async createAlbum(req, res) {
     try {
       // Los datos del formulario se encuentran en req.body

@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 
+// Tarea GA04-38-H19.1 legada
+
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI, {

@@ -15,6 +15,7 @@ const ArtistProfile = () => {
   const { user } = useContext(AuthContext);
   const [merch, setMerch] = useState([]); // Para almacenar el merchandising
 
+  // Tarea GA04-39-H16.1 Legada
   // Estados para la carga del artista, error y tabs
   const [artist, setArtist] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -25,7 +26,8 @@ const ArtistProfile = () => {
   const handleTshirtClick = (tshirt_Id) => {
     navigate(`/tshirt/${tshirt_Id}`);
   };
-
+//Tarea GA04-17 H5.2.1 Legada 
+// Tarea GA04-17 H5.2.1 legada parte 2
   useEffect(() => {
     // Cargar los datos del artista
     fetchArtistById(numericId)

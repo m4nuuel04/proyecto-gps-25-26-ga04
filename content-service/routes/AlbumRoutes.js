@@ -9,6 +9,8 @@ const fs = require('fs');
 const imageDir = path.join(__dirname, '../../undersounds-frontend/src/assets/images');
 const musicDir = path.join(__dirname, '../../undersounds-frontend/src/assets/music');
 
+// Tarea GA04-13-H2.2 Legada
+
 // Configuración mejorada de multer
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
