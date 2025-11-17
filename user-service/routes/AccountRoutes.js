@@ -18,7 +18,7 @@ router.post('/reset-password', AccountController.resetPassword);
 router.get('/google',
   passport.authenticate('google', { scope: ['profile', 'email'] })
 );
-
+// Tarea H7.1 - OAuth-Google tarea legada
 router.get('/google/callback',
   passport.authenticate('google', { failureRedirect: 'http://localhost:3000/login' }),
   (req, res) => {
