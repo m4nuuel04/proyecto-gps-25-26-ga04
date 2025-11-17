@@ -18,6 +18,8 @@ mongoose.set('strictQuery', false);
 
 const app = express();
 
+// Tarea GA04-47 H21.2 CORS y validación input Legada
+
 // CORS - permitir orígenes configurables
 const CORS_ORIGINS = process.env.CORS_ORIGINS.split(',');
 app.use(cors({
