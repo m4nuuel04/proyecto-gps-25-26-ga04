@@ -49,3 +49,5 @@ COPY undersounds-frontend/src/assets ./public/assets
 EXPOSE 5000
 
 ENTRYPOINT ["bash", "-c", "mongod --dbpath /data/db --bind_ip 127.0.0.1 & exec node server.js"]
+
+# GA04-40 H19.2 Dockerfile mínimo para contenedorar servicio legado.
