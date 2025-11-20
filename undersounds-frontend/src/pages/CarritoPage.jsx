@@ -16,6 +16,8 @@ import axios from 'axios';
 
 // Tarea GA04-37-H18.2-Contexts-Player-y-Cart legada
 
+// Subtarea GA04-37-H18.2.2-Contexts-Player-y-Cart legada
+
 const CarritoPage = () => {
   const { cartItems, updateQuantity, removeFromCart } = useContext(CartContext);
   const { user } = useContext(AuthContext);
