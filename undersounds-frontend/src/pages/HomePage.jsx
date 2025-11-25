@@ -256,8 +256,7 @@ const HomePage = () => {
           </Link>
         </Grid>
       </Grid>
-
-      {/* Sección de Álbumes Recomendados */}
+      {/* Sección de Álbumes Recomendados H14.2 Mostrar tendencias en UI*/}
       <Box className="envoltorio">
         <div className="featured-section">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', color: 'black' }}>
