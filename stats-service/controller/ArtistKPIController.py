@@ -553,7 +553,7 @@ async def export_metrics(type: str = "plays", startDate: Optional[str] = None, e
             e.get("count", 0)
         ])
     return buf.getvalue()
-
+# GA04-30-H13.1-Sugerencias-más-como-este-por-tags-géneros Tarea legada
 # GET /stats/recommendations/user/{userId}
 @router.get("/recommendations/user/{userId}")
 async def recommend_for_user(userId: str, limit: int = 20):
