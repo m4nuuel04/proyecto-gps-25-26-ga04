@@ -263,7 +263,7 @@ async def cache_info():
         "ttl_seconds": _cache.ttl,
         "keys": list(_cache.keys())[:50]  # máximo 50 para no saturar respuesta
     }
-
+# GA04-26-H11.2-API-para-consultar-KPIs Tarea legada 
 # GET /stats/artist/{artistId}/kpis
 @router.get("/stats/artist/{artistId}/kpis")
 async def get_artist_kpis(artistId: str, startDate: Optional[str] = None, endDate: Optional[str] = None):
