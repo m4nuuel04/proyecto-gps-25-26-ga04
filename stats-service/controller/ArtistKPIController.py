@@ -116,6 +116,9 @@ async def export_metrics(type: str = "plays", startDate: Optional[str] = None, e
         writer.writerow([r.get("_id"), r.get("count")])
     return buf.getvalue()
 
+# Tarea GA04-51-H24.1-Integrar-circuit-breaker-en-llamadas-externas legada
+
+
 # GET /recommendations/user/{userId}
 @router.get("/recommendations/user/{userId}")
 async def recommend_for_user(userId: str, limit: int = 20):
