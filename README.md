@@ -1,143 +1,314 @@
-# UnderSounds - Plataforma de Música para Artistas Independientes
+# UnderSounds
 
-UnderSounds es una plataforma completa para artistas musicales independientes y sus seguidores. Permite a los músicos distribuir su música, vender merchandising y conectar con fans, mientras que los oyentes pueden descubrir, comprar y disfrutar música en diversos formatos.
+**Plataforma de música para artistas independientes**
 
-## 🎵 Características principales
+UnderSounds es una plataforma completa que conecta artistas musicales independientes con sus seguidores. Permite a los músicos distribuir su música, vender merchandising y construir su audiencia, mientras que los oyentes pueden descubrir, comprar y disfrutar música en diversos formatos.
 
-### Para oyentes
-- **Descubre música**: Explora un catálogo organizado por géneros, artistas y álbumes
-- **Escucha**: Reproductor integrado para escuchar música antes de comprar
-- **Descarga**: Obtén música en múltiples formatos (MP3, FLAC, WAV)
-- **Colecciona**: Crea tu biblioteca personal con tus artistas favoritos
-- **Conecta**: Valora, comenta y sigue a tus artistas preferidos
+## Visión General
 
-### Para artistas
-- **Distribución digital**: Sube y vende tu música directamente a los fans
-- **Merchandising**: Vende productos relacionados con tu marca
-- **Perfil personalizado**: Cuenta tu historia y conecta con tu audiencia
-- **Análisis**: Datos sobre reproducciones, descargas y ventas
-- **Pagos directos**: Recibe ingresos de tus ventas de forma transparente
+UnderSounds nace como respuesta a la necesidad de los artistas independientes de tener un canal directo con su audiencia, sin intermediarios que diluyan sus ingresos o controlen su contenido. La plataforma ofrece:
 
-## 🔧 Arquitectura
+- **Para oyentes**: Descubrimiento musical, reproductor integrado, descargas en múltiples formatos y conexión directa con artistas
+- **Para artistas**: Distribución digital, venta de merchandising, analíticas detalladas y pagos directos
 
-UnderSounds utiliza el stack MERN completo:
+## Arquitectura de Microservicios
 
-- **Frontend**: React.js + Vite
-- **Backend**: Node.js + Express.js
-- **Base de datos**: MongoDB
-- **Autenticación**: JWT + OAuth2 (Google)
-- **Pagos**: Stripe
+UnderSounds implementa una arquitectura de microservicios moderna con separación clara de responsabilidades:
 
-## 🚀 Instalación y configuración
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         FRONTEND (React + Vite)                     │
+│                           Puerto 3000                               │
+└─────────────────────────────────────────────────────────────────────┘
+                                    │
+                    ┌───────────────┼───────────────┐
+                    │               │               │
+                    ▼               ▼               ▼
+┌─────────────────────┐ ┌─────────────────────┐ ┌─────────────────────┐
+│   USER SERVICE      │ │   CONTENT SERVICE   │ │   STATS SERVICE     │
+│   (Node.js/Express) │ │   (Node.js/Express) │ │   (Python/FastAPI)  │
+│   Puerto 5000       │ │   Puerto 5001       │ │   Puerto 5002       │
+│                     │ │                     │ │                     │
+│ • Autenticación     │ │ • Álbumes/Tracks    │ │ • Eventos/KPIs      │
+│ • JWT + OAuth       │ │ • Artistas          │ │ • Trending          │
+│ • Gestión usuarios  │ │ • Merchandising     │ │ • Recomendaciones   │
+│ • Follow/Like       │ │ • Noticias          │ │ • Alertas           │
+│                     │ │ • Pagos (Stripe)    │ │ • Circuit Breaker   │
+└─────────────────────┘ └─────────────────────┘ └─────────────────────┘
+          │                       │                       │
+          └───────────────────────┼───────────────────────┘
+                                  │
+                                  ▼
+                    ┌─────────────────────────┐
+                    │        MongoDB          │
+                    │   (3 bases de datos)    │
+                    └─────────────────────────┘
+```
 
-### Requisitos previos
-- Node.js 16.x o superior
-- MongoDB 4.4 o superior
-- FFmpeg (para conversión de archivos de audio)
-- Cuenta en Stripe (para procesamiento de pagos)
-- Proyecto registrado en Google Cloud Platform (para OAuth)
+### Servicios
 
-### Configuración del proyecto
+| Servicio | Tecnología | Puerto | Responsabilidad |
+|----------|------------|--------|-----------------|
+| **Frontend** | React 18 + Vite | 3000 | Interfaz de usuario SPA |
+| **User Service** | Node.js/Express | 5000 | Autenticación, perfiles, follows/likes |
+| **Content Service** | Node.js/Express | 5001 | Catálogo musical, media, pagos |
+| **Stats Service** | Python/FastAPI | 5002 | Analíticas, trending, recomendaciones |
 
-1. **Clonar el repositorio**:
-   ```bash
-   git clone https://github.com/tu-usuario/undersounds.git
-   cd undersounds
-   ```
+## Características Principales
 
-2. **Configurar el backend**:
-   ```bash
-   cd undersounds-backend
-   npm install
-   ```
-   
-   Crea un archivo `.env` con:
-   ```
-   MONGO_URI=mongodb://localhost:27017/undersounds
-   ACCESS_TOKEN_SECRET=tu_clave_secreta_jwt
-   REFRESH_TOKEN_SECRET=otra_clave_secreta_jwt
-   SESSION_SECRET=clave_para_sesiones
-   GOOGLE_CLIENT_ID=id_de_google_oauth
-   GOOGLE_CLIENT_SECRET=secret_de_google_oauth
-   GOOGLE_CALLBACK_URL=http://localhost:5000/api/auth/google/callback
-   STRIPE_SECRET_KEY=clave_secreta_de_stripe
-   ```
+### 🎵 Para Oyentes
 
-   Deberás tener un archivo dbmeta.json y otro dbmeta_local.json, si es tu primera vez al iniciar el servidor el segundo de estos archivos tendrá una versión inferior al otro y por lo tanto se iniciará el proceso de actualización de la BD.
+- **Descubrir música**: Exploración por géneros, tendencias y recomendaciones personalizadas
+- **Reproductor integrado**: Audio player global con controles de volumen y progreso
+- **Descargas**: Múltiples formatos (MP3, WAV, FLAC) con conversión en tiempo real
+- **Carrito de compras**: Gestión de álbumes, tracks y merchandising
+- **Interacción social**: Valoraciones, comentarios, follows y likes
+- **Conciertos**: Información de eventos y fechas de artistas seguidos
 
-3. **Configurar el frontend**:
-   ```bash
-   cd ../undersounds-frontend
-   npm install
-   ```
-   
-   Crea un archivo `.env` con:
-   ```
-   VITE_API_URL=http://localhost:5000/api
-   VITE_STRIPE_PUBLIC_KEY=clave_publica_de_stripe
-   ```
+### 🎸 Para Artistas
 
-4. **Iniciar la aplicación**:
-   
-   Backend:
-   ```bash
-   cd undersounds-backend
-   node server.js
-   ```
-   
-   Frontend:
-   ```bash
-   cd undersounds-frontend
-   npm start
-   ```
+- **Perfil personalizado**: Banner, bio, redes sociales y ubicación
+- **Distribución digital**: Subida de álbumes con múltiples tracks
+- **Merchandising**: Venta de vinilos, CDs, cassettes y camisetas
+- **Analíticas**: KPIs de reproducciones, likes, follows e ingresos
+- **Alertas**: Notificaciones por email al superar umbrales de actividad
+- **Pagos directos**: Integración con Stripe para cobros transparentes
 
-5. **Acceder a la aplicación**:
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:5000/api
-   - Documentación API: http://localhost:5000/api-docs
+### 🔐 Seguridad
 
-## 📂 Estructura del proyecto
+- **Autenticación dual**: Credenciales locales + OAuth 2.0 (Google)
+- **JWT con Refresh Tokens**: Access tokens (15min) + refresh en HttpOnly cookies (7 días)
+- **Recuperación de contraseña**: Sistema OTP con tokens firmados
+- **Rate limiting**: Protección contra ataques de fuerza bruta
+- **Sanitización**: Prevención de XSS y NoSQL injection
+
+### ⚡ Resiliencia
+
+- **Circuit Breaker**: Protección ante fallos de servicios externos
+- **Retry con backoff**: Reintentos automáticos con espera exponencial
+- **Caché TTL**: Optimización de consultas frecuentes
+- **Health checks**: Monitorización de estado de cada servicio
+
+## Stack Tecnológico
+
+### Frontend
+| Tecnología | Uso |
+|------------|-----|
+| React 18 | Framework UI |
+| Vite | Build tool y dev server |
+| Material-UI 6 | Componentes de diseño |
+| React Router 6 | Navegación SPA |
+| Axios | Cliente HTTP |
+| Context API | Estado global |
+
+### Backend (Node.js)
+| Tecnología | Uso |
+|------------|-----|
+| Express.js | Framework HTTP |
+| Mongoose | ODM para MongoDB |
+| Passport.js | Autenticación (JWT + OAuth) |
+| Multer | Upload de archivos |
+| FFmpeg | Conversión de audio |
+| Stripe | Procesamiento de pagos |
+| Pino | Logging estructurado |
+
+### Backend (Python)
+| Tecnología | Uso |
+|------------|-----|
+| FastAPI | Framework async |
+| Motor | Driver async MongoDB |
+| Pydantic | Validación de datos |
+| aiobreaker | Circuit Breaker |
+| tenacity | Retry patterns |
+| cachetools | Caché en memoria |
+
+### Infraestructura
+| Tecnología | Uso |
+|------------|-----|
+| MongoDB | Base de datos NoSQL |
+| Swagger/OpenAPI | Documentación de APIs |
+| dotenv | Configuración por entorno |
+
+## Instalación Rápida
+
+### Prerrequisitos
+- Node.js 18.x o superior
+- Python 3.10 o superior
+- MongoDB 5.0 o superior
+- Cuenta de Stripe (para pagos)
+- Proyecto en Google Cloud (para OAuth)
+
+### 1. Clonar el repositorio
+```bash
+git clone https://github.com/tu-usuario/undersounds.git
+cd undersounds
+```
+
+### 2. Configurar servicios
+
+**User Service:**
+```bash
+cd user-service
+npm install
+cp .env.example .env  # Configurar variables
+```
+
+**Content Service:**
+```bash
+cd content-service
+npm install
+cp .env.example .env  # Configurar variables
+```
+
+**Stats Service:**
+```bash
+cd stats-service
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env  # Configurar variables
+```
+
+**Frontend:**
+```bash
+cd undersounds-frontend
+npm install
+cp .env.example .env  # Configurar variables
+```
+
+### 3. Iniciar servicios
+
+```bash
+# Terminal 1 - User Service
+cd user-service && npm start
+
+# Terminal 2 - Content Service
+cd content-service && npm start
+
+# Terminal 3 - Stats Service
+cd stats-service && python server.py
+
+# Terminal 4 - Frontend
+cd undersounds-frontend && npm run dev
+```
+
+### 4. Acceder a la aplicación
+
+| Recurso | URL |
+|---------|-----|
+| Frontend | http://localhost:3000 |
+| User API Docs | http://localhost:5000/api-docs |
+| Content API Docs | http://localhost:5001/api-docs |
+| Stats API Docs | http://localhost:5002/api/docs |
+
+## Estructura del Proyecto
 
 ```
 undersounds/
-├── undersounds-frontend/       # Aplicación React
+├── user-service/           # Microservicio de usuarios
+│   ├── config/             # Configuración (DB, Passport)
+│   ├── controller/         # Lógica de negocio
+│   ├── middleware/         # Rate limiting, sanitización
+│   ├── model/              # DAO, DTO, Factory, Models
+│   ├── routes/             # Definición de rutas
+│   ├── docs/               # OpenAPI spec
+│   └── server.js
+│
+├── content-service/        # Microservicio de contenidos
+│   ├── config/
+│   ├── controller/
+│   ├── middleware/
+│   ├── model/
+│   ├── routes/
+│   ├── services/           # Conversión de audio
+│   ├── assets/             # Imágenes y música
+│   ├── docs/
+│   └── server.js
+│
+├── stats-service/          # Microservicio de estadísticas
+│   ├── config/
+│   ├── controller/
+│   ├── middleware/
+│   ├── model/
+│   ├── routes/
+│   ├── docs/
+│   └── server.py
+│
+├── undersounds-frontend/   # Aplicación React
 │   ├── src/
-│   │   ├── assets/             # Recursos estáticos 
-│   │   ├── components/         # Componentes reutilizables
-│   │   ├── context/            # Contextos de React
-│   │   ├── pages/              # Páginas principales
-│   │   ├── services/           # Servicios de API
-│   │   └── utils/              # Utilidades
-│   ├── .env                    # Variables de entorno
-│   └── package.json            # Dependencias frontend
+│   │   ├── components/     # Componentes reutilizables
+│   │   ├── context/        # Estado global (Auth, Cart, Player)
+│   │   ├── pages/          # Vistas principales
+│   │   ├── services/       # Clientes API
+│   │   ├── styles/         # CSS por componente
+│   │   └── utils/          # Utilidades
+│   └── vite.config.js
 │
-├── undersounds-backend/        # Servidor Node.js/Express
-│   ├── config/                 # Configuraciones
-│   ├── controller/             # Controladores API
-│   ├── docs/                   # Documentación Swagger
-│   ├── model/                  # Modelos de datos
-│   ├── routes/                 # Rutas API
-│   ├── services/               # Servicios
-│   ├── utils/                  # Utilidades
-│   ├── .env                    # Variables de entorno
-│   └── package.json            # Dependencias backend
-│
-└── README.md                   # Documentación principal
+├── test_api.bat            # Script de pruebas automatizadas
+└── README.md               # Este archivo
 ```
 
-## 🧰 Características técnicas destacadas
+## Variables de Entorno
 
-- **Reproductor de audio personalizado** integrado en toda la aplicación
-- **Conversión de formatos de audio** en tiempo real (MP3, FLAC, WAV)
-- **Sistema de autenticación avanzado** con JWT, refresh tokens y OAuth
-- **Integración con Stripe** para procesamiento seguro de pagos
-- **Arquitectura escalable** basada en microservicios y API REST
-- **Sistema de búsqueda avanzada** con filtros.
+### Frontend (.env)
+```env
+VITE_USER_API_URL=http://localhost:5000/api
+VITE_CONTENT_API_URL=http://localhost:5001/api
+VITE_STATS_API_URL=http://localhost:5002/api
+```
 
-## 📜 Licencia
+### User Service (.env)
+```env
+PORT=5000
+MONGO_URI=mongodb://localhost:27017/undersounds_users
+ACCESS_TOKEN_SECRET=<secreto>
+REFRESH_TOKEN_SECRET=<secreto>
+GOOGLE_CLIENT_ID=<client_id>
+GOOGLE_CLIENT_SECRET=<client_secret>
+```
 
-Este proyecto está bajo la Licencia MIT. Consulta sus detalles en Github.
+### Content Service (.env)
+```env
+PORT=5001
+MONGO_URI=mongodb://localhost:27017/undersounds_content
+STRIPE_SECRET_KEY=<stripe_key>
+```
 
----
+### Stats Service (.env)
+```env
+PORT=5002
+HOST=0.0.0.0
+MONGO_URI=mongodb://localhost:27017/undersounds_stats
+CONTENT_SERVICE_URL=http://localhost:5001
+```
 
-© 2025 UnderSounds - Plataforma para música independiente.
+## Documentación Adicional
+
+Cada servicio incluye su propia documentación técnica detallada:
+
+- [User Service README](./user-service/README.md) — Autenticación, OAuth, gestión de cuentas
+- [Content Service README](./content-service/README.md) — Catálogo, media, pagos
+- [Stats Service README](./stats-service/README.md) — Analíticas, trending, recomendaciones
+
+## Testing
+
+El proyecto incluye un script de pruebas automatizadas para validar todos los endpoints:
+
+```bash
+# Windows
+test_api.bat
+
+# El script prueba:
+# - Health checks de todos los servicios
+# - Registro y login de usuarios
+# - CRUD de álbumes, artistas, noticias
+# - Ingesta de eventos y KPIs
+# - Trending y recomendaciones
+# - Circuit breaker y caché
+```
+
+## Licencia
+
+Este proyecto está bajo la Licencia MIT — ver [LICENSE](LICENSE) para más detalles.
+
+**UnderSounds** — Proyecto académico desarrollado para la asignatura de Arquitectura de Sistemas Empresariales en la Universidad de Extremadura.

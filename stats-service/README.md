@@ -1,137 +1,373 @@
-El backend de UnderSounds proporciona una API completa para gestionar la plataforma de música, ofreciendo servicios para autenticación, gestión de contenido musical, procesamiento de pagos y más.
+# Stats Service — UnderSounds
 
-## Funcionalidades principales
+Microservicio de estadísticas, analíticas y recomendaciones para la plataforma UnderSounds.
 
-### Autenticación y Usuarios
-- **Registro y login tradicional** con JWT y sistema de refresh tokens
-- **Autenticación OAuth con Google** mediante Passport.js
-- **Recuperación de contraseña** con sistema de OTP
-- **Perfiles de usuario** con distintos roles (fan, banda, sello discográfico)
+## Descripción
 
-### Gestión de Contenido Musical
-- **Catálogo de música**: álbumes, artistas y pistas
-- **Descarga de música** en múltiples formatos (MP3, WAV, FLAC)
-- **Conversión de archivos de audio** mediante FFmpeg
-- **Integración con Jamendo** para ampliar el catálogo musical
+El **Stats Service** es responsable de la ingesta de eventos de usuario, cálculo de KPIs de artistas, detección de tendencias y generación de recomendaciones personalizadas. Implementa patrones de resiliencia avanzados (Circuit Breaker, Retry) y sistema de caché para optimizar el rendimiento.
 
-### E-commerce
-- **Carrito de compras** para gestionar artículos seleccionados
-- **Procesamiento de pagos** mediante Stripe
-- **Gestión de merchandising** (camisetas y otros productos)
+## Características Principales
 
-### Otras funcionalidades
-- **Sistema de noticias musicales** (CRUD completo)
-- **Documentación automática** con Swagger
+### Ingesta de Eventos
+- **Event Sourcing**: Recepción y almacenamiento de eventos de usuario en tiempo real
+- **Procesamiento asíncrono**: Actualización de KPIs en background tasks
+- **Tipos de eventos soportados**: `track.played`, `track.liked`, `artist.followed`, `order.paid`
 
-## Instalación y configuración
+### KPIs de Artistas
+- **Métricas agregadas**: plays, likes, follows, purchases, revenue
+- **Consultas por rango de fechas**: Filtrado por `startDate` y `endDate`
+- **Persistencia**: Almacenamiento incremental en colección dedicada
 
-1. **Clonar el repositorio**:
-   ```
-   git clone <URL_DEL_REPOSITORIO>
-   cd undersounds-backend
+### Sistema de Tendencias
+- **Trending tracks**: Top canciones por reproducciones
+- **Trending artists**: Artistas más seguidos
+- **Períodos configurables**: day, week, month, year
+- **Enriquecimiento de datos**: Consulta al Content Service para metadatos completos
+
+### Recomendaciones
+- **Recomendaciones por usuario**: Basadas en historial de likes y reproducciones
+- **Recomendaciones por similitud**: Álbumes del mismo género
+- **Fallback inteligente**: Artistas populares cuando no hay historial
+
+### Sistema de Alertas
+- **Umbrales configurables**: plays, likes, follows
+- **Notificación por email**: Envío automático al superar umbrales
+- **Cooldown**: Prevención de spam (1 hora entre alertas)
+- **Ventana temporal**: Configurable en minutos
+
+### Resiliencia
+- **Circuit Breaker**: Protección ante fallos del Content Service (aiobreaker)
+- **Retry con backoff exponencial**: 3 intentos con espera progresiva (tenacity)
+- **Caché TTL**: Reducción de carga en consultas frecuentes (cachetools)
+
+## Arquitectura
+
+```
+stats-service/
+├── config/
+│   ├── db.py                 # Conexión a MongoDB (motor async)
+│   ├── init_db.py            # Inicialización de colecciones
+│   ├── dbmeta.json           # Metadatos de versión compartidos
+│   └── dbmeta_local.json     # Versión local de BD
+├── controller/
+│   ├── ArtistKPIController.py  # KPIs, trending, cache, alertas, CB
+│   └── EventController.py      # Ingesta de eventos
+├── middleware/
+│   └── rate_limit.py         # Limitador de tasa (slowapi)
+├── model/
+│   ├── dao/
+│   │   ├── ArtistKPIDAO.py   # Acceso a datos de KPIs
+│   │   └── EventDAO.py       # Acceso a datos de eventos
+│   ├── dto/
+│   │   ├── ArtistKPIDTO.py   # Transferencia de datos
+│   │   └── EventDTO.py
+│   ├── factory/
+│   │   ├── ArtistKPIFactory.py
+│   │   └── EventFactory.py
+│   └── models/
+│       ├── ArtistKPIModel.py # Modelo Pydantic
+│       └── EventModel.py
+├── routes/
+│   ├── ArtistKPIRoutes.py    # Rutas de estadísticas
+│   └── EventRoutes.py        # Rutas de eventos
+├── utils/
+│   └── logger.py             # Logging estructurado
+├── docs/
+│   └── Estadisticas.yaml     # Especificación OpenAPI
+├── data-dump/
+│   ├── artist_kpis.json      # KPIs exportados
+│   └── events.json           # Eventos exportados
+├── view/
+│   └── index.html            # Página de bienvenida
+├── requirements.txt          # Dependencias Python
+└── server.py                 # Punto de entrada FastAPI
+```
+
+## Instalación
+
+### Prerrequisitos
+- Python 3.10 o superior
+- MongoDB 5.0 o superior
+- Node.js 18.x (para scripts de import/export)
+- Servidor SMTP (para alertas por email)
+
+### Configuración
+
+1. **Crear entorno virtual**:
+   ```bash
+   cd stats-service
+   python -m venv venv
+   
+   # Windows
+   venv\Scripts\activate
+   
+   # Linux/Mac
+   source venv/bin/activate
    ```
 
 2. **Instalar dependencias**:
-   ```
-   npm install
-   ```
-
-3. **Configurar variables de entorno**:
-   Crea un archivo `.env` con:
-   ```
-   MONGO_URI=<URI_DE_MONGODB>
-   ACCESS_TOKEN_SECRET=<CLAVE_JWT_ACCESS>
-   REFRESH_TOKEN_SECRET=<CLAVE_JWT_REFRESH>
-   SESSION_SECRET=<CLAVE_SESIONES>
-   GOOGLE_CLIENT_ID=<ID_OAUTH_GOOGLE>
-   GOOGLE_CLIENT_SECRET=<SECRET_OAUTH_GOOGLE>
-   GOOGLE_CALLBACK_URL=http://localhost:5000/api/auth/google/callback
-   STRIPE_SECRET_KEY=<CLAVE_SECRETA_STRIPE>
+   ```bash
+   pip install -r requirements.txt
+   npm install  # Para scripts de BD
    ```
 
-4. **Ejecutar el servidor**:
+3. **Configurar variables de entorno** (`.env`):
+   ```env
+   # Servidor
+   PORT=5002
+   HOST=0.0.0.0
+   CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+   SHUTDOWN_TIMEOUT=30
+
+   # Base de datos
+   MONGO_URI=mongodb://localhost:27017/undersounds_stats
+
+   # Content Service (para enriquecimiento de datos)
+   CONTENT_SERVICE_URL=http://localhost:5001
+
+   # SMTP (para alertas)
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=<email>
+   SMTP_PASS=<password>
+   FROM_EMAIL=<email_remitente>
+
+   # Caché
+   CACHE_MAX_SIZE=500
+   CACHE_DEFAULT_TTL=3600
    ```
-   npm start
+
+4. **Ejecutar el servicio**:
+   ```bash
+   python server.py
    ```
 
 5. **Acceder a la documentación**:
-   Navega a `http://localhost:5000/api-docs` para explorar la API con Swagger.
+   - Swagger UI: `http://localhost:5002/api/docs`
+   - OpenAPI YAML: `http://localhost:5002/api/openapi.yaml`
+   - Health check: `http://localhost:5002/healthz`
 
-## Gestión de base de datos
+## API Endpoints
 
-El backend incluye herramientas para importar y exportar datos de MongoDB:
+### Ingesta de Eventos
 
-- **Importar datos**:
-  ```
-  npm run mongoimport
-  ```
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| `POST` | `/api/stats/events` | Enviar evento de usuario (async) |
 
-- **Exportar datos**:
-  ```
-  npm run mongoexport
-  ```
+**Tipos de eventos soportados:**
+- `track.played` — Reproducción de pista
+- `track.liked` — Like a pista
+- `artist.followed` — Follow a artista
+- `order.paid` — Compra completada
 
-## Endpoints principales
+### KPIs de Artistas
 
-### Autenticación
-- `POST /api/auth/register`: Registro de usuarios
-- `POST /api/auth/login`: Inicio de sesión
-- `POST /api/auth/refresh-token`: Renovación de tokens
-- `POST /api/auth/logout`: Cierre de sesión
-- `GET /api/auth/google`: Autenticación con Google
-- `POST /api/auth/forgot-password`: Solicitud de recuperación
-- `POST /api/auth/reset-password`: Restablecimiento con OTP
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| `GET` | `/api/stats/artist/{artist_id}/kpis` | KPIs agregados (plays, likes, follows, purchases, revenue) |
 
-### Música
-- `GET /api/albums`: Obtiene todos los álbumes
-- `GET /api/albums/{id}`: Obtiene un álbum específico
-- `GET /api/albums/{id}/download`: Descarga una pista en MP3/WAV/FLAC
-- `GET /api/albums/{id}/download-album`: Descarga un álbum completo en ZIP
+**Query parameters:**
+- `startDate` (ISO 8601) — Fecha inicio del rango
+- `endDate` (ISO 8601) — Fecha fin del rango
 
-### Artistas
-- `GET /api/artists`: Lista de artistas
-- `GET /api/artists/{id}`: Información de un artista específico
+### Tendencias
 
-### Merchandising
-- `GET /api/merchandising`: Catálogo de productos
-- `GET /api/merchandising/{id}`: Detalles de un producto
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| `GET` | `/api/stats/trending` | Top tracks o artistas |
 
-### Noticias
-- `GET /api/noticias`: Obtener noticias musicales
-- `POST /api/noticias`: Crear una noticia
+**Query parameters:**
+- `genre` — `"tracks"` o `"artists"` para filtrar tipo
+- `period` — `day`, `week`, `month` (default: `week`)
+- `limit` — Número de resultados (default: `10`)
 
-### Pagos
-- `POST /create-checkout-session`: Procesa pagos con Stripe
+### Recomendaciones
 
-## Tecnologías utilizadas
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| `GET` | `/api/recommendations/user/{user_id}` | Recomendaciones personalizadas |
+| `GET` | `/api/recommendations/similar` | Álbumes similares por género |
 
-- **Node.js y Express**: Base del servidor
-- **MongoDB y Mongoose**: Base de datos y ODM
-- **JWT y Passport**: Autenticación y autorización
-- **FFmpeg**: Conversión de formatos de audio
-- **Stripe**: Procesamiento de pagos
-- **Swagger**: Documentación de API
-- **Archiver**: Compresión de archivos para descarga
+### Alertas
 
-## Requisitos técnicos
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| `POST` | `/api/stats/alerts` | Evaluar umbrales y enviar alerta |
 
-- Node.js 16.x o superior
-- MongoDB 4.4 o superior
-- FFmpeg (instalado globalmente para conversión de audio)
-- Conexión a internet para servicios externos (Stripe, OAuth)
-
-## Estructura del proyecto
-
+**Body:**
+```json
+{
+  "artistId": "123",
+  "windowMinutes": 60,
+  "thresholds": {
+    "plays": 100,
+    "likes": 50,
+    "follows": 10
+  },
+  "notifyEmail": "artist@example.com"
+}
 ```
-undersounds-backend/
-├── config/              # Configuraciones (DB, Passport)
-├── controller/          # Controladores de la API
-├── data-dump/           # Datos exportados de MongoDB
-├── docs/                # Documentación API (Swagger)
-├── model/               # Modelos de datos y DAOs
-├── routes/              # Definición de rutas
-├── services/            # Servicios (conversión de audio, etc.)
-├── utils/               # Utilidades
-├── view/                # Vistas HTML (mínimas)
-├── .env                 # Variables de entorno (no en repo)
-└── server.js            # Punto de entrada
+
+### Caché y Monitorización
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| `GET` | `/api/stats/cache/info` | Estadísticas del caché |
+| `POST` | `/api/stats/cache/clear` | Limpiar caché (todo o clave específica) |
+| `GET` | `/api/stats/cb/status` | Estado del Circuit Breaker |
+
+### Health Check
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| `GET` | `/healthz` | Estado del servicio, MongoDB, memoria, CB |
+
+## Modelos de Datos
+
+### Event Schema
+
+```python
+{
+    "eventType": str,       # "track.played", "track.liked", etc.
+    "timestamp": datetime,  # Momento del evento
+    "userId": str | None,   # ID de usuario (opcional)
+    "anonymous": bool,      # True si usuario anónimo
+    "entityType": str,      # "track", "artist", "album"
+    "entityId": str,        # ID de la entidad afectada
+    "metadata": {           # Datos adicionales del evento
+        "albumId": str,
+        "artistId": str,
+        "genre": str,
+        "price": float
+    }
+}
+```
+
+### ArtistKPI Schema
+
+```python
+{
+    "artistId": str,
+    "period": str | None,     # Período de agregación
+    "plays": int,             # Total reproducciones
+    "uniqueListeners": int,   # Oyentes únicos
+    "likes": int,             # Total likes
+    "follows": int,           # Total seguidores
+    "purchases": int,         # Total compras
+    "revenue": float          # Ingresos totales
+}
+```
+
+## Patrones de Resiliencia
+
+### Circuit Breaker
+
+El servicio implementa Circuit Breaker para proteger las llamadas al Content Service:
+
+| Estado | Descripción |
+|--------|-------------|
+| **Closed** | Funcionamiento normal, las peticiones pasan |
+| **Open** | Circuito abierto tras 5 fallos, rechaza peticiones |
+| **Half-Open** | Tras 30s, permite una petición de prueba |
+
+**Configuración:**
+- `fail_max`: 5 fallos consecutivos
+- `reset_timeout`: 30 segundos
+
+### Retry con Backoff Exponencial
+
+Las peticiones HTTP fallidas se reintentan automáticamente:
+
+| Intento | Espera |
+|---------|--------|
+| 1 | 1 segundo |
+| 2 | 2 segundos |
+| 3 | 4 segundos |
+
+**Errores reintentables:** `TimeoutException`, `ConnectError`, códigos 502/503/504
+
+### Caché TTL
+
+- **Tamaño máximo:** 500 entradas (configurable)
+- **TTL por defecto:** 3600 segundos (1 hora)
+- **Claves cacheadas:** trending, recomendaciones de usuario
+- **Thread-safe:** Locks por clave para evitar stampedes
+
+## Gestión de Base de Datos
+
+```bash
+# Importar datos desde data-dump/
+npm run mongoimport
+
+# Exportar datos actuales
+npm run mongoexport
+```
+
+El sistema de versionado (`dbmeta.json` / `dbmeta_local.json`) sincroniza automáticamente al iniciar si la versión local está desactualizada.
+
+## Comunicación con Otros Servicios
+
+### Content Service (puerto 5001)
+
+| Operación | Endpoint | Propósito |
+|-----------|----------|-----------|
+| Obtener álbum | `GET /api/albums/{id}` | Enriquecer trending tracks |
+| Obtener artista | `GET /api/artists/{id}` | Enriquecer trending artists, obtener email |
+| Buscar por género | `GET /api/albums?genre=X` | Recomendaciones similares |
+
+Todas las llamadas están protegidas por Circuit Breaker y Retry.
+
+## Variables de Entorno
+
+| Variable | Descripción | Requerido | Default |
+|----------|-------------|-----------|---------|
+| `PORT` | Puerto del servidor | Sí | — |
+| `HOST` | Host de escucha | Sí | — |
+| `CORS_ORIGINS` | Orígenes permitidos (coma) | Sí | — |
+| `MONGO_URI` | URI de conexión a MongoDB | Sí | — |
+| `CONTENT_SERVICE_URL` | URL del Content Service | No | — |
+| `SMTP_HOST` | Servidor SMTP | No | — |
+| `SMTP_PORT` | Puerto SMTP | No | 587 |
+| `SMTP_USER` | Usuario SMTP | No | — |
+| `SMTP_PASS` | Contraseña SMTP | No | — |
+| `FROM_EMAIL` | Email remitente | No | — |
+| `CACHE_MAX_SIZE` | Tamaño máximo del caché | No | 500 |
+| `CACHE_DEFAULT_TTL` | TTL del caché en segundos | No | 3600 |
+| `SHUTDOWN_TIMEOUT` | Timeout de graceful shutdown | No | 30 |
+
+## Tecnologías
+
+| Tecnología | Uso |
+|------------|-----|
+| FastAPI | Framework HTTP async |
+| Motor | Driver async para MongoDB |
+| Pydantic | Validación y serialización |
+| aiobreaker | Circuit Breaker async |
+| tenacity | Retry con backoff |
+| cachetools | Caché TTL in-memory |
+| httpx | Cliente HTTP async |
+| slowapi | Rate limiting |
+| uvicorn | Servidor ASGI |
+| psutil | Monitorización de recursos |
+| pino (structlog) | Logging estructurado |
+
+## Health Check Response
+
+```json
+{
+  "status": "ok",
+  "service": "stats-service",
+  "timestamp": "2025-11-27T12:00:00Z",
+  "checks": {
+    "mongodb": { "status": "ok" },
+    "memory": { "status": "ok", "rss_mb": 128.5 },
+    "circuit_breaker": { "status": "ok", "state": "Closed" }
+  }
+}
+```
+
+**Estados posibles:**
+- `ok` — Todos los checks pasaron
+- `degraded` — Algún componente con problemas
+- `error` — Fallo crítico

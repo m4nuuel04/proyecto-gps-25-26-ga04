@@ -4,7 +4,7 @@ info:
   version: "1.0.0"
   description: "API para manejo de contenidos: álbumes, pistas, artistas, merchandising y noticias."
 servers:
-  - url: http://localhost:5000/api
+  - url: http://localhost:5001/api
 
 tags:
   - name: Content
@@ -23,6 +23,18 @@ paths:
     get:
       tags: [Content]
       summary: Obtiene todos los álbumes
+      parameters:
+        - in: query
+          name: genre
+          schema:
+            type: string
+          description: Filtra álbumes por género (case-insensitive, regex-like)
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 0
+          description: Límite de resultados (0 = sin límite)
       responses:
         "200":
           description: Lista de álbumes obtenida exitosamente
@@ -36,14 +48,27 @@ paths:
           description: Error interno del servidor
     post:
       tags: [Content]
-      summary: Crea un nuevo álbum
+      summary: Crea un nuevo álbum (soporta subida de archivos)
       requestBody:
-        description: Datos del álbum a crear
+        description: Datos del álbum a crear. Permite `multipart/form-data` para subir `coverImage` y archivos de `tracks`.
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
-              $ref: '#/components/schemas/Album'
+              allOf:
+                - $ref: '#/components/schemas/Album'
+                - type: object
+                  properties:
+                    coverImage:
+                      type: string
+                      format: binary
+                      description: "Archivo de imagen (cover) enviado como multipart/form-data"
+                    tracks:
+                      type: array
+                      items:
+                        type: string
+                        format: binary
+                      description: "Archivos de audio para las pistas (opcional). También se pueden enviar metadatos separados en un campo JSON si se requiere."
       responses:
         "201":
           description: Álbum creado exitosamente
@@ -55,6 +80,7 @@ paths:
           description: Datos inválidos
         "500":
           description: Error interno del servidor
+
   /albums/{id}:
     get:
       tags: [Content]
@@ -127,7 +153,8 @@ paths:
           description: Álbum no encontrado
         "500":
           description: Error interno del servidor
-  /albums/{id}/ratings:
+
+  /albums/{id}/rate:
     post:
       tags: [Content]
       summary: Añade una valoración a un álbum
@@ -174,6 +201,7 @@ paths:
           description: Álbum no encontrado
         "500":
           description: Error interno del servidor
+
   /albums/{id}/download:
     get:
       tags: [Media]
@@ -220,6 +248,7 @@ paths:
           description: Álbum o pista no encontrados
         "500":
           description: Error interno del servidor
+
   /albums/{id}/download-album:
     get:
       tags: [Media]
@@ -252,6 +281,7 @@ paths:
           description: Álbum no encontrado o sin pistas
         "500":
           description: Error interno del servidor
+
   /artists:
     get:
       tags: [Artists]
@@ -288,6 +318,7 @@ paths:
           description: Datos inválidos
         "500":
           description: Error interno del servidor
+
   /artists/{id}:
     get:
       tags: [Artists]
@@ -360,7 +391,8 @@ paths:
           description: Artista no encontrado
         "500":
           description: Error interno del servidor
-  /news:
+
+  /noticias:
     get:
       tags: [News]
       summary: Obtiene todas las noticias
@@ -396,7 +428,7 @@ paths:
           description: Datos inválidos
         "500":
           description: Error interno del servidor
-  /news/{id}:
+  /noticias/{id}:
     get:
       tags: [News]
       summary: Obtiene una noticia por su ID
@@ -601,6 +633,7 @@ paths:
           description: Artista no encontrado
         "500":
           description: Error interno del servidor
+
 components:
   schemas:
     News:
@@ -608,31 +641,40 @@ components:
       properties:
         _id:
           type: string
-          example: "60d0fe4f5311236168a109cf"
-        title:
+          description: "ID interno (MongoDB ObjectId como string)"
+          example: "67f54135665dfb8ecf467182"
+        id:
+          type: integer
+          description: "ID numérico usado en la colección"
+          example: 2
+        titulo:
           type: string
-          example: "Lanzamiento de nuevo álbum"
-        content:
+          example: "Noticia Actualizada 18129"
+        body:
           type: string
-          example: "Hoy se lanza el nuevo álbum de la banda The Soundscapers..."
-        author:
-          type: string
-          example: "Redacción UnderSounds"
-        publishDate:
-          type: string
-          format: date-time
-          example: "2025-10-07T12:00:00Z"
+          example: "El aclamado DJ y productor musical, DJ Beats, ha anunciado oficialmente su gira internacional..."
         image:
           type: string
-          example: "/assets/images/news1.jpg"
-        tags:
-          type: array
-          items:
-            type: string
-          example: ["lanzamiento", "álbum", "rock"]
-        highlighted:
-          type: boolean
-          example: false
+          format: uri
+          example: "http://localhost:5001/assets/images/imagen2.jpeg"
+        fechaPublicacion:
+          type: string
+          format: date
+          example: "2025-03-14"
+        autor:
+          type: string
+          example: "Lucía Fernández"
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Fecha de última actualización (solo presente en noticias actualizadas)"
+          example: "2025-11-26T23:17:30.447Z"
+      required:
+        - id
+        - titulo
+        - body
+
     Album:
       type: object
       properties:
@@ -673,6 +715,7 @@ components:
         destacado:
           type: boolean
           example: false
+
     Track:
       type: object
       properties:
@@ -694,6 +737,10 @@ components:
         n_reproducciones:
           type: number
           example: 1500
+        format:
+          type: string
+          example: "mp3"
+
     Artist:
       type: object
       properties:
@@ -741,6 +788,7 @@ components:
             instagram:
               type: string
               example: "https://instagram.com/soundscapers"
+
     Merchandise:
       type: object
       properties:
@@ -772,3 +820,12 @@ components:
         stock:
           type: number
           example: 50
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []

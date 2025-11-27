@@ -1,5 +1,8 @@
 require('dotenv').config();
 const express = require('express');
+const compression = require('compression');
+const pinoHttp = require('pino-http');
+const logger = require('./utils/logger'); 
 const connectDB = require('./config/db');
 const albumRoutes = require('./routes/AlbumRoutes');
 const artistRoutes = require('./routes/ArtistRoutes');
@@ -10,21 +13,21 @@ const swaggerUi = require('swagger-ui-express');
 const cookieParser = require('cookie-parser');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
-const { exec, spawn } = require('child_process');
-const readline = require('readline');
+const path = require('node:path');
+const fs = require('node:fs');
+const { exec, spawn } = require('node:child_process');
+const readline = require('node:readline');
 const Stripe = require('stripe');
-
-// Tarea GA04-65 H9.2.1 Inicio de checkout con Stripe cliente Legada
-//Tarea GA04-12-H9.2-Inicio-de-checkout-con-Stripe-cliente- legada parte 2
+const { generalLimiter, checkoutLimiter } = require('./middleware/rateLimit');
 
 mongoose.set('strictQuery', false);
-// Tarea GA04-49-H23.1.2 legada
+
 const app = express();
 
-// Tarea GA04-14 H9.3 Webhook Stripe creación de pedido legada
-// Tarea GA04-14-H9.3-Webhook-Stripe-creación-de-pedido parte 2 legada
+app.use(compression());
+
+// HTTP request logging
+app.use(pinoHttp({ logger, autoLogging: true }));
 
 // CORS: orígenes configurables por env (comma-separated). Fallback a http://localhost:3000
 const rawOrigins = process.env.CORS_ORIGINS || 'http://localhost:3000';
@@ -37,20 +40,19 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-// Servir assets (opcional — conserva si quieres servir imágenes desde este servicio)
-app.use('/assets', express.static(path.join(__dirname, '../undersounds-frontend/src/assets')));
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
 // Conectar a MongoDB para content-service
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGO_URL;
 if (!MONGO_URI) {
-  console.warn('MONGO_URI no definida. connectDB será llamada con valor undefined.');
+  logger.warn('MONGO_URI no definida');
 }
 connectDB(MONGO_URI);
 
 // Stripe init
 const stripeKey = process.env.STRIPE_SECRET_KEY || '';
 if (!stripeKey) {
-  console.error('WARNING: STRIPE_SECRET_KEY no definida en environment variables. create-checkout-session fallará hasta definirla.');
+  logger.warn('STRIPE_SECRET_KEY no definida');
 }
 const stripe = Stripe(stripeKey);
 
@@ -73,6 +75,8 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
+app.use(generalLimiter);
+
 // Rutas del content-service
 app.use('/api/albums', albumRoutes);
 app.use('/api/artists', artistRoutes);
@@ -88,30 +92,29 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 5001;
 const startServer = () => {
   app.listen(PORT, () => {
-    console.log(`Content-service corriendo en el puerto ${PORT}`);
+    logger.info({ port: PORT }, 'Content-service iniciado');
   });
 };
 
-// ----- Gestión de metadata / importación local (mantener útil para dev) -----
+// ----- Gestión de metadata / importación local -----
 const sharedMetaFile = path.join(__dirname, 'config', 'dbmeta.json');
 const localMetaFile = path.join(__dirname, 'config', 'dbmeta_local.json');
 
 const getVersionFromFile = (filePath) => {
   let version = 0;
   try {
-    if (!fs.existsSync(filePath)) {
-      if (filePath === localMetaFile) {
-        fs.writeFileSync(filePath, JSON.stringify({ dbVersion: 0, colecciones: [] }, null, 2));
-        console.log(`${filePath} no existía, se ha creado con valor 0 y colecciones vacías.`);
-        return 0;
-      }
-    } else {
+    if (fs.existsSync(filePath)) {
       const data = fs.readFileSync(filePath, 'utf-8');
       const parsed = JSON.parse(data);
       version = parsed.dbVersion || 0;
+    } else if (filePath === localMetaFile) {
+        fs.writeFileSync(filePath, JSON.stringify({ dbVersion: 0, colecciones: [] }, null, 2));
+        logger.info({ filePath }, 'Archivo meta creado');
+        return 0;
+      }
     }
-  } catch (err) {
-    console.error(`Error leyendo ${filePath}:`, err);
+  catch (err) {
+    logger.error({ err, filePath }, 'Error leyendo archivo meta');
   }
   return version;
 };
@@ -124,14 +127,14 @@ const updateVersionFile = (filePath, newVersion, newColecciones = null) => {
       meta = JSON.parse(data);
     }
   } catch (err) {
-    console.error(`Error leyendo ${filePath}:`, err);
+    logger.error({ err, filePath }, 'Error leyendo archivo meta');
   }
   meta.dbVersion = newVersion;
   if (newColecciones !== null) {
     meta.colecciones = newColecciones;
   }
   fs.writeFileSync(filePath, JSON.stringify(meta, null, 2));
-  console.log(`${filePath} actualizado a la versión ${newVersion} con colecciones:`, meta.colecciones);
+  logger.info({ filePath, newVersion, colecciones: meta.colecciones }, 'Archivo meta actualizado');
 };
 
 const CURRENT_DB_VERSION = getVersionFromFile(sharedMetaFile);
@@ -139,19 +142,19 @@ const CURRENT_DB_VERSION = getVersionFromFile(sharedMetaFile);
 const checkAndImportData = () => {
   const localVersion = getVersionFromFile(localMetaFile);
   if (localVersion < CURRENT_DB_VERSION) {
-    console.log("La versión local es antigua o no existe. Ejecutando mongoimport...");
+    logger.info('Version local desactualizada, ejecutando mongoimport...');
     exec('npm run mongoimport', (err, stdout, stderr) => {
       if (err) {
-        console.error("Error ejecutando mongoimport:", err);
+        logger.error({ err }, 'Error ejecutando mongoimport');
         startServer();
       } else {
-        console.log("mongoimport completado:", stdout);
+        logger.info({ stdout }, 'mongoimport completado');
         let currentCollections = [];
         try {
           const metaData = fs.existsSync(sharedMetaFile) ? JSON.parse(fs.readFileSync(sharedMetaFile, 'utf8')) : {};
           currentCollections = metaData.colecciones || [];
         } catch (e) {
-          console.error(e);
+          logger.error({ err: e }, 'Error leyendo colecciones');
         }
         updateVersionFile(sharedMetaFile, CURRENT_DB_VERSION, currentCollections);
         updateVersionFile(localMetaFile, CURRENT_DB_VERSION, currentCollections);
@@ -159,31 +162,33 @@ const checkAndImportData = () => {
       }
     });
   } else {
-    console.log("La BD ya está actualizada.");
+    logger.info('BD actualizada');
     startServer();
   }
 };
 
 // Backups on exit (optional)
 process.on('SIGINT', () => {
-  console.log("Se detectó el cierre del proceso.");
+  process.stdout.write('Se detectó el cierre del proceso — iniciando cierre...\n');
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
   });
+
   rl.question("¿Desea respaldar los datos con mongoexport? (S/N): ", (answer) => {
     if (answer.trim().toUpperCase() === "S") {
-      console.log("Ejecutando mongoexport para respaldar datos...");
-      const child = spawn('node', ['export-db.js'], { stdio: 'inherit' });
+      process.stdout.write('Ejecutando mongoexport para respaldar datos...\n');
+      const child = spawn('node', ['export-db.mjs'], { stdio: 'inherit' });
       child.on('exit', (code) => {
-        console.log(`\nExportación de datos completada con código ${code}`);
+        process.stdout.write(`Exportación de datos completada con código ${code}\n`);
         const newVersion = CURRENT_DB_VERSION + 1;
         let currentCollections = [];
         try {
           const metaData = fs.existsSync(sharedMetaFile) ? JSON.parse(fs.readFileSync(sharedMetaFile, 'utf8')) : {};
           currentCollections = metaData.colecciones || [];
         } catch (e) {
-          console.error(e);
+          logger.error(e);
         }
         updateVersionFile(sharedMetaFile, newVersion, currentCollections);
         updateVersionFile(localMetaFile, newVersion, currentCollections);
@@ -191,20 +196,70 @@ process.on('SIGINT', () => {
         process.exit();
       });
     } else {
-      console.log("No se realizará el respaldo de datos.");
+      process.stdout.write('No se realizará el respaldo de datos. Cerrando...\n');
       rl.close();
       process.exit();
     }
   });
 });
 
-// Health check (useful)
-app.get('/healthz', (req, res) => {
-  res.json({ status: 'ok', service: 'content-service', port: PORT });
+// Health check
+app.get('/healthz', async (req, res) => {
+  const health = {
+    status: 'ok',
+    service: 'content-service',
+    timestamp: new Date().toISOString(),
+    checks: {}
+  };
+
+  // 1. Check MongoDB
+  try {
+    const dbState = mongoose.connection.readyState;
+    if (dbState === 1) {
+      await mongoose.connection.db.admin().ping();
+      health.checks.mongodb = { status: 'ok' };
+    } else {
+      health.checks.mongodb = { status: 'error', detail: `readyState=${dbState}` };
+      health.status = 'degraded';
+    }
+  } catch (err) {
+    health.checks.mongodb = { status: 'error', detail: err.message };
+    health.status = 'degraded';
+  }
+
+  // 2. Check memoria
+  try {
+    const memUsage = process.memoryUsage();
+    const heapMB = Math.round(memUsage.heapUsed / (1024 * 1024));
+    const rssMB = Math.round(memUsage.rss / (1024 * 1024));
+    health.checks.memory = {
+      status: heapMB < 500 ? 'ok' : 'warning',
+      heap_mb: heapMB,
+      rss_mb: rssMB
+    };
+    if (heapMB >= 500) health.status = 'degraded';
+  } catch (err) {
+    health.checks.memory = { status: 'unknown', detail: err.message };
+  }
+
+  // 3. Check Stripe configurado
+  health.checks.stripe = {
+    status: stripeKey ? 'ok' : 'warning',
+    configured: !!stripeKey
+  };
+
+  // 4. Check uptime
+  health.checks.uptime = {
+    status: 'ok',
+    seconds: Math.floor(process.uptime())
+  };
+
+  const statusCode = health.status === 'ok' ? 200 : 503;
+  res.status(statusCode).json(health);
 });
 
 // Create checkout session (Stripe)
-app.post('/create-checkout-session', async (req, res) => {
+app.post('/create-checkout-session', checkoutLimiter, async (req, res) => {
   const { items } = req.body;
 
   if (!Array.isArray(items) || items.length === 0) {
@@ -215,7 +270,7 @@ app.post('/create-checkout-session', async (req, res) => {
   try {
     lineItems = items.map(item => {
       if (typeof item.price !== 'number' || typeof item.quantity !== 'number') {
-        throw new Error('Invalid item format: price and quantity must be numbers');
+        throw new TypeError('Invalid item format: price and quantity must be numbers');
       }
       return {
         price_data: {
@@ -230,12 +285,12 @@ app.post('/create-checkout-session', async (req, res) => {
       };
     });
   } catch (err) {
-    console.error('Error building lineItems:', err);
+    logger.error({ err }, 'Error building lineItems');
     return res.status(400).json({ error: err.message });
   }
 
   if (!stripeKey) {
-    console.error('Stripe secret key no configurada. Abortando create-checkout-session.');
+    logger.error('Stripe secret key no configurada');
     return res.status(500).json({ error: 'Stripe not configured' });
   }
 
@@ -247,12 +302,10 @@ app.post('/create-checkout-session', async (req, res) => {
       success_url: 'http://localhost:3000/paymentSuccess',
       cancel_url: 'http://localhost:3000/',
     });
-
     res.json({ url: session.url });
   } catch (err) {
-    console.error('Stripe/create-checkout-session error:', err);
-    // If Stripe provides a raw error message, include it; otherwise a generic message
-    const message = err && (err.message || (err.raw && err.raw.message)) ? (err.message || err.raw.message) : 'Stripe error';
+    logger.error({ err }, 'Stripe checkout error');
+    const message = err?.message || err?.raw?.message || 'Stripe error';
     res.status(500).json({ error: message });
   }
 });

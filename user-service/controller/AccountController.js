@@ -5,16 +5,18 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
+const { withRetry } = require('../utils/httpRetry');
+const logger = require('../utils/logger');
 
 const CONTENT_SERVICE_URL = process.env.CONTENT_SERVICE_URL || 'http://localhost:5001/api';
 const SERVICE_API_KEY = process.env.SERVICE_API_KEY || '';
 
-// nodemailer: mantengo las credenciales en el archivo según tu petición
+// nodemailer
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: 'pruebaspi060@gmail.com',
-    pass: 'haqv baox evro yxcj'
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
   }
 });
 
@@ -31,7 +33,7 @@ function generateOtp() {
 // Función para enviar el correo real con el OTP
 async function sendOtpEmail(email, otp) {
   const mailOptions = {
-    from: '"Soporte" pruebaspi060@gmail.com',
+    from: process.env.FROM_EMAIL,
     to: email,
     subject: 'Código de recuperación de contraseña',
     text: `Tu código OTP es: ${otp}`,
@@ -43,7 +45,7 @@ async function sendOtpEmail(email, otp) {
 
 // Helpers para comunicación con content-service
 async function createArtistRemote(artistPayload) {
-  try {
+  return withRetry(async () => {
     const resp = await axios.post(
       `${CONTENT_SERVICE_URL}/artists`,
       artistPayload,
@@ -55,25 +57,23 @@ async function createArtistRemote(artistPayload) {
         timeout: 10000
       }
     );
-    // content-service puede devolver { artista: {...} } o directamente el objeto
     return resp.data?.artista || resp.data?.artist || resp.data;
-  } catch (err) {
-    // Propagar para que el llamador decida la política
-    throw err;
-  }
+  }, 3, 1000); // 3 intentos, 1s base delay
 }
 
 async function fetchArtistRemoteById(artistId) {
   try {
-    const resp = await axios.get(`${CONTENT_SERVICE_URL}/artists/${artistId}`, {
-      headers: {
-        ...(SERVICE_API_KEY && { 'x-service-api-key': SERVICE_API_KEY })
-      },
-      timeout: 8000
-    });
-    return resp.data?.artista || resp.data?.artist || resp.data;
+    return await withRetry(async () => {
+      const resp = await axios.get(`${CONTENT_SERVICE_URL}/artists/${artistId}`, {
+        headers: {
+          ...(SERVICE_API_KEY && { 'x-service-api-key': SERVICE_API_KEY })
+        },
+        timeout: 8000
+      });
+      return resp.data?.artista || resp.data?.artist || resp.data;
+    }, 3, 1000);
   } catch (err) {
-    // En caso de error, retornar null (no bloquear autenticación)
+    logger.warn({ err: err.message, artistId }, 'fetchArtistRemoteById failed');
     return null;
   }
 }
@@ -118,18 +118,16 @@ class AccountController {
               await AccountDao.linkToArtist(newAccount._id, newArtistId);
               const updatedAccount = await AccountDao.findById(newAccount._id);
               return res.status(201).json(new AccountDTO(updatedAccount));
-            } catch (linkErr) {
-              // Si falla la vinculación en la BD de usuarios, devolvemos la cuenta creada y log
-              console.error('Error vinculando artistId a la cuenta:', linkErr);
+            } catch (error_) {
+              logger.error({ err: error_, accountId: newAccount._id }, 'Error vinculando artistId');
               return res.status(201).json(new AccountDTO(newAccount));
             }
           } else {
-            console.warn('Artist creado remoto pero sin ID:', createdArtist);
+            logger.warn({ createdArtist }, 'Artist creado sin ID');
             return res.status(201).json(new AccountDTO(newAccount));
           }
-        } catch (artistErr) {
-          console.error('Error creando artista remoto:', artistErr.message || artistErr);
-          // Devolver la cuenta creada (sin artist link)
+        } catch (error_) {
+          logger.error({ err: error_.message }, 'Error creando artista remoto');
           return res.status(201).json(new AccountDTO(newAccount));
         }
       }
@@ -156,12 +154,12 @@ class AccountController {
           const artistRemote = await fetchArtistRemoteById(account.artistId);
           if (artistRemote) {
             // Crear una copia ligera del account y adjuntar artist
-            const accountPlain = account.toObject ? account.toObject() : Object.assign({}, account);
+            const accountPlain = account.toObject ? account.toObject() : { ...account };
             accountPlain.artist = artistRemote;
             accountToReturn = accountPlain;
           } // si no hay artistRemote, devolvemos account sin artist
         } catch (err) {
-          console.warn('No se pudo obtener artista remoto en login:', err.message || err);
+          logger.warn({ err: err.message, artistId: account.artistId }, 'Error obteniendo artista en login');
           accountToReturn = account;
         }
       }
@@ -220,12 +218,12 @@ class AccountController {
           try {
             const artistRemote = await fetchArtistRemoteById(account.artistId);
             if (artistRemote) {
-              const accountPlain = account.toObject ? account.toObject() : Object.assign({}, account);
+              const accountPlain = account.toObject ? account.toObject() : { ...account };
               accountPlain.artist = artistRemote;
               accountToReturn = accountPlain;
             }
           } catch (err) {
-            console.warn('No se pudo obtener artista remoto en refreshToken:', err.message || err);
+            logger.warn({ err: err.message, artistId: account.artistId }, 'Error obteniendo artista en refreshToken');
             accountToReturn = account;
           }
         }
@@ -306,7 +304,7 @@ class AccountController {
 
       // Envía el OTP por correo de forma asíncrona
       sendOtpEmail(email, otp).catch(err => {
-        console.error("Error enviando el correo OTP:", err);
+        logger.error({ err, email }, 'Error enviando OTP');
       });
 
       // Responde inmediatamente y envía también el otpToken para que el cliente lo guarde
@@ -324,13 +322,11 @@ class AccountController {
         return res.status(400).json({ error: 'No se ha proporcionado el otpToken' });
       }
 
-      // Muestra el contenido del token sin verificar para debug
-      const decodedPreview = jwt.decode(otpToken);
-
       let decoded;
       try {
         decoded = jwt.verify(otpToken, process.env.OTP_SECRET);
       } catch (err) {
+        logger.warn({ err: err.message, email }, 'OTP token inválido/expirado');
         return res.status(400).json({ error: 'Token OTP inválido o expirado' });
       }
 
@@ -343,7 +339,6 @@ class AccountController {
         return res.status(404).json({ error: 'Correo no encontrado' });
       }
 
-      const hashStart = Date.now();
       account.password = await bcrypt.hash(newPassword, 10);
 
       await account.save();
@@ -395,9 +390,59 @@ class AccountController {
           account: new AccountDTO(updatedAccount)
         });
       } catch (err) {
-        console.error('Error creando artista remoto:', err.message || err);
+        logger.error({ err: err.message, accountId }, 'Error creando artista remoto');
         return res.status(500).json({ error: 'Error creando artista remoto' });
       }
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async toggleFollow(req, res) {
+    try {
+      const userId = req.user.id; // Viene del middleware de auth
+      const { artistId } = req.body;
+      
+      const account = await AccountDao.findById(userId);
+      const isFollowing = Boolean(account.following?.includes(String(artistId)));
+      
+      let updatedAccount;
+      if (isFollowing) {
+        updatedAccount = await AccountDao.unfollowArtist(userId, artistId);
+      } else {
+        updatedAccount = await AccountDao.followArtist(userId, artistId);
+      }
+      
+      res.json({ 
+        success: true, 
+        following: !isFollowing, 
+        list: updatedAccount.following 
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async toggleLike(req, res) {
+    try {
+      const userId = req.user.id;
+      const { trackId } = req.body;
+      
+      const account = await AccountDao.findById(userId);
+      const isLiked = Boolean(account.likedTracks?.includes(String(trackId)));
+      
+      let updatedAccount;
+      if (isLiked) {
+        updatedAccount = await AccountDao.unlikeTrack(userId, trackId);
+      } else {
+        updatedAccount = await AccountDao.likeTrack(userId, trackId);
+      }
+      
+      res.json({ 
+        success: true, 
+        liked: !isLiked, 
+        list: updatedAccount.likedTracks 
+      });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

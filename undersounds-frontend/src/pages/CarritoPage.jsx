@@ -10,40 +10,34 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { Box, Typography } from '@mui/material';
 import axios from 'axios';
 
-// Tarea GA04-46-H17.2-Finalizar-compra-desde-UI-checkout- legada
-
-// Tarea GA04-44-H17.1-UI-del-carrito-frontend legada
-
-// Tarea GA04-37-H18.2-Contexts-Player-y-Cart legada
-
-// Subtarea GA04-37-H18.2.2-Contexts-Player-y-Cart legada
 
 const CarritoPage = () => {
   const { cartItems, updateQuantity, removeFromCart } = useContext(CartContext);
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
 
   // Calcular el total considerando la cantidad de cada producto
   const total = cartItems.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
-
-  if (!acceptedTerms) {
-    alert("Debes aceptar los términos y condiciones antes de proceder al pago.");
-    return;
-  }
 
   const handlePago = async () => {
     try {
       const response = await axios.post('http://localhost:5001/create-checkout-session', {
         items: cartItems,
       });
-      window.location.href = response.data.url;
+      globalThis.location.href = response.data.url;
     } catch (error) {
+      console.error('Error iniciando pago:', error);
       alert('Error al iniciar el pago.');
     }
   };
 
   const handleCheckout = () => {
+    if (!acceptedTerms) {
+      alert('Debes aceptar los términos y condiciones para proceder a la compra.');
+      return;
+    }
+
     if (cartItems.length === 0) {
       alert("El carrito está vacío. Agrega productos antes de proceder al pago.");
       return;
@@ -61,7 +55,7 @@ const CarritoPage = () => {
     };
   
     // Guardar el resumen en localStorage
-    localStorage.setItem('orderSummary', JSON.stringify(orderSummary));
+    globalThis.localStorage.setItem('orderSummary', JSON.stringify(orderSummary));
   
     // Iniciar el proceso de pago (por ejemplo, llamando a Stripe)
     handlePago();
@@ -74,7 +68,6 @@ const CarritoPage = () => {
       <div className="cart-summary">
         <h2>Resumen</h2>
         <p>Total: {total.toFixed(2)}€</p>
-
         {/* ------------------ bloque de términos ------------------ */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
@@ -83,13 +76,12 @@ const CarritoPage = () => {
               checked={acceptedTerms}
               onChange={(e) => setAcceptedTerms(e.target.checked)}
             />
-            Acepto los términos y condiciones
+            <span style={{ marginLeft: 8 }}>Acepto los términos y condiciones</span>
           </label>
           <button
             type="button"
             onClick={() => {
-              // Mostrar términos; reemplazar por modal o página dedicada si se desea
-              alert('Términos y condiciones:\n\nAl realizar la compra aceptas las condiciones de uso y política de devoluciones. (Reemplaza este texto por los términos reales de tu aplicación).');
+              alert('Términos y condiciones:\n\nAl realizar la compra aceptas las condiciones de uso y política de devoluciones.');
             }}
             style={{
               background: 'transparent',
@@ -104,7 +96,6 @@ const CarritoPage = () => {
           </button>
         </div>
         {/* --------------------------------------------------------- */}
-
         <button className="proceed-button" onClick={handleCheckout}>
           Proceder al pago
         </button>
